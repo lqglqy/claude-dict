@@ -30,7 +30,7 @@ enum ClipboardGuard {
 enum SelectionReader {
     enum Mode { case mouse, hotkey }
 
-    private enum AXOutcome {
+    enum AXOutcome {
         case text(String)
         case noSelection
         case secure
@@ -77,7 +77,12 @@ enum SelectionReader {
               let focusedRef, CFGetTypeID(focusedRef) == AXUIElementGetTypeID() else {
             return (.failed(role: nil), false)
         }
-        let element = focusedRef as! AXUIElement
+        return inspect(focusedRef as! AXUIElement, mouseDownAt: mouseDownAt)
+    }
+
+    /// Selection state of one element: its selected text, unless it is a password field or the
+    /// drag started outside it. Returns whether the element is editable (for "替换原文").
+    static func inspect(_ element: AXUIElement, mouseDownAt: CGPoint?) -> (AXOutcome, Bool) {
         AXUIElementSetMessagingTimeout(element, 0.6)
         let role = string(element, kAXRoleAttribute)
         let subrole = string(element, kAXSubroleAttribute)
@@ -112,7 +117,7 @@ enum SelectionReader {
         return false
     }
 
-    private static func frame(of element: AXUIElement) -> CGRect? {
+    static func frame(of element: AXUIElement) -> CGRect? {
         var positionRef: CFTypeRef?
         var sizeRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &positionRef) == .success,

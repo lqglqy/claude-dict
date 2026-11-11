@@ -44,6 +44,9 @@ if [ "${1:-}" = "--install" ]; then
   mkdir -p "$HOME/Applications"
   rm -rf "$DEST"
   ditto "$APP" "$DEST"
+  # The new ad-hoc signature no longer matches the old Accessibility grant; clear the stale entry
+  # so the app can ask again instead of looking enabled but not working.
+  tccutil reset Accessibility local.claudedict.app >/dev/null 2>&1 || true
   /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$DEST" >/dev/null 2>&1 || true
   open "$DEST"
   echo "✓ installed $DEST and started it"

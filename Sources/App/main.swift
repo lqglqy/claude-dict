@@ -14,6 +14,15 @@ if arguments.contains("--list-voices") {
     exit(0)
 }
 
+if arguments.contains("--selftest-ax") {
+    MainActor.assumeIsolated {
+        let application = NSApplication.shared
+        application.setActivationPolicy(.accessory)
+        AXSelfTest.run()
+        application.run()
+    }
+}
+
 MainActor.assumeIsolated {
     let application = NSApplication.shared
     let delegate = AppDelegate(options: LaunchOptions(arguments: arguments))
