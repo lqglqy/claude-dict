@@ -40,6 +40,13 @@ enum Prompts {
                                   options: [.regularExpression, .caseInsensitive])
     }
 
+    /// What "替换原文" pastes over the user's selection: only a finished polish of text selected in
+    /// another app. Not gated on Accessibility's "editable" flag, which web text boxes often omit.
+    static func replacementText(action: Action, output: String, finished: Bool, fromSourceApp: Bool) -> String? {
+        guard action == .polish, finished, fromSourceApp else { return nil }
+        return extractPolished(from: output)
+    }
+
     static func extractPolished(from output: String) -> String? {
         guard let marker = output.range(of: polishedHeading) else { return nil }
         var section = output[marker.upperBound...]

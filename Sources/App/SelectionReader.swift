@@ -164,18 +164,27 @@ enum SelectionReader {
         return text
     }
 
-    /// Puts `text` into the app the selection came from, then restores the clipboard.
+    /// Pastes `text` over the selection in app `pid` with ⌘V, then puts the user's clipboard back.
+    /// Waits a moment for keyboard focus to return from the closed panel, and pastes only if `pid`
+    /// is still frontmost, so the text never lands in some other app. Reports whether it pasted.
     @MainActor
-    static func paste(_ text: String, into pid: pid_t?) {
-        let pasteboard = NSPasteboard.general
-        let saved = snapshot(pasteboard)
-        ClipboardGuard.suppress(for: 2)
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
-        if let pid, let app = NSRunningApplication(processIdentifier: pid) { app.activate(options: []) }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+    static func paste(_ text: String, into pid: pid_t, completion: @escaping (Bool) -> Void = { _ in }) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else {
+                completion(false)
+                return
+            }
+            let pasteboard = NSPasteboard.general
+            let saved = snapshot(pasteboard)
+            ClipboardGuard.suppress(for: 3)
+            pasteboard.clearContents()
+            pasteboard.setString(text, forType: .string)
             postKey(CGKeyCode(kVK_ANSI_V), flags: .maskCommand)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { restore(pasteboard, saved) }
+            // Browsers paste asynchronously; restoring too early would paste the old clipboard.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                restore(pasteboard, saved)
+                completion(true)
+            }
         }
     }
 

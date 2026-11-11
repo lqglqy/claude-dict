@@ -33,6 +33,7 @@ scripts/build.sh --install
 | 朗读选中文字 | ⌃⌥S |
 | 打开输入框 | ⌃⌥I（没选中文字时按 ⌃⌥D 也会打开） |
 | 连按两次 ⌘C | GoldenDict 的 macOS 查词方式，默认关闭，在设置里打开；不需要辅助功能权限 |
+| 替换原文 | 润色完成后，原文旁边出现“替换原文”按钮（窗口在前台时也可以按 ⌘↩），把你选中的文字直接换成润色结果 |
 | 结果窗口 | Esc 关闭；点图钉固定后，点别处不关闭，新的查询都显示在这个窗口 |
 
 快捷键用的是 ⌃⌥ 组合，避开了 Bob、Easydict 默认的 ⌥D、⌥A、⌥S。
@@ -81,6 +82,7 @@ echo "Had I known, I would have come." | ClaudeDict --cli analyze
 - 只有在你点工具条按钮或按快捷键时，选中的文字才会发给 Claude。单纯选中文字只在本机读取，不会发出去。
 - 密码输入框里的内容永远不读。
 - 读不到选区时会模拟一次 ⌘C，读完立刻把剪贴板恢复原样。这个行为可以在设置里关掉。
+- “替换原文”是借剪贴板粘贴：放入润色结果，按 ⌘V，1 秒后把原来的剪贴板内容（包括图片、富文本等所有格式）放回去。只有原文所在的 App 还在前台时才会粘贴；不在前台时只把结果复制到剪贴板并提示你。
 - `claude` 以 `--safe-mode --tools "" --no-session-persistence` 运行：不加载你的 hooks、插件、MCP 和 CLAUDE.md，不开任何工具，也不保存会话记录。
 
 ## 常见问题
@@ -106,7 +108,7 @@ tccutil reset Accessibility local.claudedict.app
 ## 开发
 
 ```bash
-scripts/test.sh                                   # 核心逻辑自测（50 项，用假的 claude 脚本，不联网）
+scripts/test.sh                                   # 核心逻辑自测（51 项，用假的 claude 脚本，不联网）
 scripts/build.sh                                  # 只编译到 build/ClaudeDict.app
 build/ClaudeDict.app/Contents/MacOS/ClaudeDict --selftest-ax   # 辅助功能读选区自测（需要终端有辅助功能权限）
 build/ClaudeDict.app/Contents/MacOS/ClaudeDict --snapshot translate out.png --warm-wait 8 "serendipity"

@@ -29,6 +29,27 @@ enum AXSelfTest {
         secure.orderFrontRegardless()
         windows = [panel, secure]
 
+        // 替换原文 borrows the clipboard; it must come back with every type it had. Uses a private
+        // pasteboard so the user's clipboard is never touched.
+        let board = NSPasteboard(name: NSPasteboard.Name("local.claudedict.selftest"))
+        board.clearContents()
+        let rtf = Data("{\\rtf1\\ansi rich}".utf8)
+        let item = NSPasteboardItem()
+        item.setString("user's own clipboard", forType: .string)
+        item.setData(rtf, forType: .rtf)
+        board.writeObjects([item])
+        let saved = SelectionReader.snapshot(board)
+        board.clearContents()
+        board.setString("Hello, I never give up.", forType: .string)
+        SelectionReader.restore(board, saved)
+        let restored = board.string(forType: .string) == "user's own clipboard" && board.data(forType: .rtf) == rtf
+        print("\(restored ? "ok  " : "FAIL") clipboard restored with all its types after a paste")
+        board.releaseGlobally()
+        if !restored {
+            print("AX self-test: 1 failed")
+            exit(1)
+        }
+
         // AX requests to our own process are served by the main run loop, so query off-main.
         DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
             var failures = 0
@@ -47,7 +68,7 @@ enum AXSelfTest {
             } else {
                 check(false, "selected text via AX: \(outcome)")
             }
-            check(editable, "text view reported editable (enables 替换原文)")
+            check(editable, "text view reported editable")
 
             if let frame = SelectionReader.frame(of: area) {
                 let inside = CGPoint(x: frame.midX, y: frame.midY)

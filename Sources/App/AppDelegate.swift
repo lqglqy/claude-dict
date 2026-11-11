@@ -75,7 +75,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         monitor.onSelection = { [weak self] selection, point in self?.toolbar.show(selection, at: point) }
         monitor.onDismiss = { [weak self] _ in self?.toolbar.hide() }
         clipboard.onDoubleCopy = { [weak self] text in
-            self?.result.show(text: text, action: .translate, near: NSEvent.mouseLocation, context: nil)
+            // The selection is still live in the app that was copied from, so 替换 can paste there.
+            let front = NSWorkspace.shared.frontmostApplication
+            let context = front.flatMap { app -> SelectionContext? in
+                app.processIdentifier == ProcessInfo.processInfo.processIdentifier ? nil
+                    : SelectionContext(pid: app.processIdentifier, bundleID: app.bundleIdentifier, isEditable: false)
+            }
+            self?.result.show(text: text, action: .translate, near: NSEvent.mouseLocation, context: context)
         }
 
         if let snapshot = options.snapshot {
@@ -352,7 +358,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func snapshotLookup(_ snapshot: (action: Action, output: String, text: String)) {
         // Pinned, so a click elsewhere on the screen does not close the panel mid-lookup.
         result.model.pinned = true
-        result.show(text: snapshot.text, action: snapshot.action, near: NSPoint(x: 600, y: 700), context: nil)
+        // Pretend the text came from another app so selection-only controls (替换原文) render.
+        let context = SelectionContext(pid: ProcessInfo.processInfo.processIdentifier, bundleID: nil, isEditable: true)
+        result.show(text: snapshot.text, action: snapshot.action, near: NSPoint(x: 600, y: 700), context: context)
         result.moveOffscreen()
         let started = Date()
         timers.append(Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] timer in

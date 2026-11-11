@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import SwiftUI
 
 @MainActor
@@ -17,6 +18,8 @@ final class LookupViewModel: ObservableObject {
     @Published var pinned = false
     @Published var focusRequest = 0
     @Published var blurRequest = 0
+    /// One-off message shown in the footer (e.g. why 替换 could not paste).
+    @Published var notice: String?
     private(set) var context: SelectionContext?
 
     private unowned let app: AppModel
@@ -52,6 +55,7 @@ final class LookupViewModel: ObservableObject {
         self.input = input
         output = ""
         stats = nil
+        notice = nil
         guard !input.text.isEmpty else {
             phase = .idle
             return
@@ -100,9 +104,11 @@ final class LookupViewModel: ObservableObject {
         return output
     }
 
-    var canReplace: Bool {
-        action == .polish && phase == .done && (context?.isEditable ?? false)
-            && Prompts.extractPolished(from: output) != nil
+    /// What "替换原文" pastes over the selection. Needs the app the text came from and permission
+    /// to send ⌘V; typed-in text has nothing to replace.
+    var replacementText: String? {
+        Prompts.replacementText(action: action, output: output, finished: phase == .done,
+                                fromSourceApp: context?.pid != nil && AXIsProcessTrusted())
     }
 
     /// English in the answer worth reading aloud.
@@ -185,6 +191,16 @@ struct ResultView: View {
                 .lineLimit(1...4)
                 .focused($inputFocused)
                 .onSubmit { model.run() }
+            if let replacement = model.replacementText {
+                Button { onReplace(replacement) } label: {
+                    Label("替换原文", systemImage: "arrow.left.arrow.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
+                .buttonStyle(HoverButtonStyle(selected: true))
+                .keyboardShortcut(.return, modifiers: .command)
+                .help("把选中的原文直接换成润色结果（⌘↩）")
+            }
             if !model.sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 IconButton(symbol: speech.isReading(model.sourceText) ? "stop.fill" : "speaker.wave.2",
                            help: "朗读原文") {
@@ -248,18 +264,15 @@ struct ResultView: View {
 
     private var footer: some View {
         HStack(spacing: 4) {
-            Text(model.statusLine)
+            Text(model.notice ?? model.statusLine)
                 .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+                .foregroundStyle(model.notice == nil ? Color.secondary : Color.orange)
+                .lineLimit(2)
             Spacer(minLength: 4)
             if let speakable = model.speakableOutput {
                 IconButton(symbol: speech.isReading(speakable) ? "stop.fill" : "speaker.wave.2", help: "朗读结果") {
                     speech.toggle(speakable)
                 }
-            }
-            if model.canReplace {
-                TextButton(title: "替换原文", symbol: "arrow.left.arrow.right") { onReplace(model.copyText) }
             }
             TextButton(title: copied ? "已复制" : "复制", symbol: copied ? "checkmark" : "doc.on.doc") {
                 SelectionReader.copyToClipboard(model.copyText)
@@ -366,9 +379,20 @@ final class ResultController: NSObject, NSWindowDelegate {
     }
 
     private func replace(with text: String) {
-        let pid = model.context?.pid
+        guard let pid = model.context?.pid else { return }
+        // The panel never activates ClaudeDict, so the source app should still be in front.
+        guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else {
+            SelectionReader.copyToClipboard(text)
+            model.notice = "原文所在的 App 已不在前台，润色结果已复制，请手动粘贴。"
+            return
+        }
         close()
-        SelectionReader.paste(text, into: pid)
+        SelectionReader.paste(text, into: pid) { pasted in
+            if !pasted {
+                SelectionReader.copyToClipboard(text)
+                NSSound.beep()
+            }
+        }
     }
 
     private func startMonitors() {

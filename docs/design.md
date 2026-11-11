@@ -68,9 +68,15 @@ claude -p --model <m> --system-prompt <通用提示词> --tools "" --no-session-
 3. 辅助功能读取失败、且焦点不是列表、表格、按钮这类非文本控件、前台也不是 Finder 时，模拟 ⌘C，读完恢复剪贴板。
 4. Electron/Chromium 应用会先设置 `AXManualAccessibility`，让它们暴露辅助功能树。
 
+## 替换原文
+
+润色结果完成、且原文来自其他 App 的选区（工具条、快捷键或 ⌘C⌘C）时，原文那一行出现“替换原文”按钮。是否显示由 `Prompts.replacementText` 决定，不再看辅助功能的“可编辑”标记：网页里的输入框（比如各家聊天网页的输入框）经常不报这个标记，按钮就一直不出现。
+
+替换用粘贴实现：结果窗口不会激活 ClaudeDict，所以原 App 一直在前台、选区还在。点按钮后先关窗口，等 0.25 秒让键盘焦点回到原 App，确认前台仍是原 App，再放入润色结果、发 ⌘V，1 秒后恢复用户原来的剪贴板（浏览器是异步粘贴，太早恢复会粘出旧内容）。原 App 已不在前台时不粘贴，只复制结果并在窗口底部提示。
+
 ## 验证
 
-- `scripts/test.sh`：50 项核心自测，用 `Tests/fixtures/fake-claude.sh` 模拟 stream-json 协议，不联网。为确认测试真能发现问题，做过 6 次故意破坏（去掉 --safe-mode、把错误当成功、按块解码 UTF-8、不读缓存、关机时不 SIGKILL、预热进程启动即失败时丢掉原因），每次都由对应的测试报错，恢复后全部通过。
+- `scripts/test.sh`：51 项核心自测，用 `Tests/fixtures/fake-claude.sh` 模拟 stream-json 协议，不联网。为确认测试真能发现问题，做过 6 次故意破坏（去掉 --safe-mode、把错误当成功、按块解码 UTF-8、不读缓存、关机时不 SIGKILL、预热进程启动即失败时丢掉原因），每次都由对应的测试报错，恢复后全部通过。
 - `--selftest-ax`：在本进程的屏幕外窗口里放一个 NSTextView 和一个密码框，用真实的辅助功能 API 读取选区、可编辑性、元素范围，并确认不读密码框。去掉密码框判断后该项报错。
 - `--snapshot`：用真实 claude 跑一次查询，把结果窗口画成 PNG 检查排版，也用来测预热后的耗时（数据见 README）。
 - 正常模式启动检查：找到 `~/.local/bin/claude`，haiku、sonnet 各一个预热进程，5 个快捷键都注册成功；收到 SIGTERM 后正常退出，没有遗留 claude 进程。
