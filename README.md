@@ -106,7 +106,7 @@ tccutil reset Accessibility local.claudedict.app
 ## 开发
 
 ```bash
-scripts/test.sh                                   # 核心逻辑自测（49 项，用假的 claude 脚本，不联网）
+scripts/test.sh                                   # 核心逻辑自测（50 项，用假的 claude 脚本，不联网）
 scripts/build.sh                                  # 只编译到 build/ClaudeDict.app
 build/ClaudeDict.app/Contents/MacOS/ClaudeDict --selftest-ax   # 辅助功能读选区自测（需要终端有辅助功能权限）
 build/ClaudeDict.app/Contents/MacOS/ClaudeDict --snapshot translate out.png --warm-wait 8 "serendipity"

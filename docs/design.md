@@ -70,7 +70,7 @@ claude -p --model <m> --system-prompt <通用提示词> --tools "" --no-session-
 
 ## 验证
 
-- `scripts/test.sh`：49 项核心自测，用 `Tests/fixtures/fake-claude.sh` 模拟 stream-json 协议，不联网。为确认测试真能发现问题，做过 5 次故意破坏（去掉 --safe-mode、把错误当成功、按块解码 UTF-8、不读缓存、关机时不 SIGKILL），每次都由对应的测试报错，恢复后全部通过。
+- `scripts/test.sh`：50 项核心自测，用 `Tests/fixtures/fake-claude.sh` 模拟 stream-json 协议，不联网。为确认测试真能发现问题，做过 6 次故意破坏（去掉 --safe-mode、把错误当成功、按块解码 UTF-8、不读缓存、关机时不 SIGKILL、预热进程启动即失败时丢掉原因），每次都由对应的测试报错，恢复后全部通过。
 - `--selftest-ax`：在本进程的屏幕外窗口里放一个 NSTextView 和一个密码框，用真实的辅助功能 API 读取选区、可编辑性、元素范围，并确认不读密码框。去掉密码框判断后该项报错。
 - `--snapshot`：用真实 claude 跑一次查询，把结果窗口画成 PNG 检查排版，也用来测预热后的耗时（数据见 README）。
 - 正常模式启动检查：找到 `~/.local/bin/claude`，haiku、sonnet 各一个预热进程，5 个快捷键都注册成功；收到 SIGTERM 后正常退出，没有遗留 claude 进程。
