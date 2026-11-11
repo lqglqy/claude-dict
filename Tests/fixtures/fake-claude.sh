@@ -12,6 +12,14 @@ while [ $# -gt 0 ]; do
   shift
 done
 
+# "stubborn": ignores SIGTERM and lingers after stdin closes, like a slow shutdown.
+if [ "${FAKE_CLAUDE_MODE:-}" = "stubborn" ]; then
+  trap '' TERM
+  IFS= read -r line
+  sleep 5
+  exit 0
+fi
+
 # Like the real CLI: stdin closed before any message means exit quietly.
 IFS= read -r line || exit 0
 if [ -n "$FAKE_CLAUDE_CAPTURE" ]; then printf '%s\n' "$line" > "$FAKE_CLAUDE_CAPTURE"; fi

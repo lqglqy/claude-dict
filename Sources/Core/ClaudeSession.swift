@@ -78,6 +78,9 @@ final class ClaudeSession {
 
     var processIdentifier: Int32 { process.processIdentifier }
 
+    /// The OS process is still there (also true for a cancelled session that is shutting down).
+    var isRunning: Bool { process.isRunning }
+
     var isAlive: Bool {
         lock.lock()
         defer { lock.unlock() }
@@ -328,13 +331,19 @@ final class SparePool {
         for model in models { ensureSpare(model: model) }
     }
 
-    func shutdown() {
+    /// Stops all spares. With `wait`, blocks until they exit and SIGKILLs any still running, so
+    /// none outlive the app (cancel's own delayed SIGKILL never fires once the app has quit).
+    func shutdown(wait: TimeInterval = 0) {
         lock.lock()
         isShutdown = true
         let old = Array(spares.values)
         spares.removeAll()
         lock.unlock()
         old.forEach { $0.cancel() }
+        guard wait > 0 else { return }
+        let deadline = Date().addingTimeInterval(wait)
+        while Date() < deadline, old.contains(where: { $0.isRunning }) { Thread.sleep(forTimeInterval: 0.02) }
+        for session in old where session.isRunning { kill(session.processIdentifier, SIGKILL) }
     }
 
     func spareCount(model: String) -> Int {

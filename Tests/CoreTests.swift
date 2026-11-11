@@ -379,6 +379,18 @@ func runEngineTests() {
         if case .finished? = collect(s, "x").last {} else { fail("fresh session did not finish") }
         pool.shutdown()
     }
+    test("pool shutdown with wait kills spares that ignore SIGTERM") {
+        let pool = SparePool(executable: { fake }, environment: env("stubborn"), workingDirectory: work,
+                             maxAge: 600, replacementDelay: 0)
+        pool.prewarm(models: ["haiku"])
+        guard let spare = pool.spare(model: "haiku") else { fail("no spare"); return }
+        Thread.sleep(forTimeInterval: 0.3) // let the fake install its SIGTERM trap
+        let started = Date()
+        pool.shutdown(wait: 0.5)
+        Thread.sleep(forTimeInterval: 0.2)
+        expect(!spare.isRunning, "spare outlived shutdown(wait:)")
+        expect(Date().timeIntervalSince(started) < 2)
+    }
     test("spare pool reports a missing claude binary") {
         let pool = SparePool(executable: { nil }, environment: [:], workingDirectory: work, maxAge: 600, replacementDelay: 0)
         do {
