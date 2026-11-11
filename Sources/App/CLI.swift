@@ -59,14 +59,16 @@ enum CLI {
         engine.run(action: action, input: input, model: model ?? settings.model(for: action), queue: queue) { update in
             switch update {
             case .partial(let soFar):
-                guard !html, soFar.count > printed else { return }
-                write(String(soFar.dropFirst(printed)))
-                printed = soFar.count
+                // Count Unicode scalars, not Characters: a combining mark in a later chunk would
+                // otherwise merge into an already printed character and be lost.
+                guard !html, soFar.unicodeScalars.count > printed else { return }
+                write(suffix(of: soFar, after: printed))
+                printed = soFar.unicodeScalars.count
             case .finished(let final, _):
                 if html {
                     write("<div class=\"claudedict\" style=\"line-height:1.55\">\(Markdown.html(final))</div>\n")
                 } else {
-                    write((final.count > printed ? String(final.dropFirst(printed)) : "") + "\n")
+                    write(suffix(of: final, after: printed) + "\n")
                 }
                 done.signal()
             case .failed(let message):
@@ -91,6 +93,11 @@ enum CLI {
             return cached
         }
         return ClaudeLocator.locateDefault(override: override)
+    }
+
+    private static func suffix(of text: String, after scalars: Int) -> String {
+        guard text.unicodeScalars.count > scalars else { return "" }
+        return String(String.UnicodeScalarView(text.unicodeScalars.dropFirst(scalars)))
     }
 
     private static func write(_ string: String) {

@@ -51,6 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var timers: [Timer] = []
     private var pendingURLs: [URL] = []
     private var launched = false
+    private var hotkeysRegistered = false
     private let hotkeyQueue = DispatchQueue(label: "claudedict.hotkey", qos: .userInitiated)
 
     init(options: LaunchOptions) {
@@ -188,6 +189,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             toolbar.hide()
         }
         if settings.doubleCopyEnabled { clipboard.start() } else { clipboard.stop() }
+        // Re-register only when the switch changes, not on every settings tweak (e.g. a slider).
+        guard settings.hotkeysEnabled != hotkeysRegistered else { return }
+        hotkeysRegistered = settings.hotkeysEnabled
         if settings.hotkeysEnabled {
             HotKeyCenter.shared.register([
                 (HotKeyCenter.translate, { [weak self] in self?.runOnSelection(.translate) }),

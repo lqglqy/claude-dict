@@ -43,6 +43,8 @@ enum SelectionReader {
         "AXList", "AXOutline", "AXTable", "AXBrowser", "AXImage", "AXButton", "AXMenuItem",
         "AXMenuBar", "AXDockItem", "AXScrollBar", "AXSlider", "AXToolbar", "AXSplitter",
     ]
+    // Read from both the mouse-selection queue and the hotkey queue.
+    private static let pidLock = NSLock()
     nonisolated(unsafe) private static var manualAccessibilityPIDs = Set<pid_t>()
 
     /// Blocking; call off the main thread. `mouseDownAt` is in Accessibility coordinates
@@ -135,8 +137,10 @@ enum SelectionReader {
 
     /// Electron and Chromium apps only build their accessibility tree when asked to.
     private static func enableManualAccessibility(_ pid: pid_t) {
-        guard !manualAccessibilityPIDs.contains(pid) else { return }
-        manualAccessibilityPIDs.insert(pid)
+        pidLock.lock()
+        let isNew = manualAccessibilityPIDs.insert(pid).inserted
+        pidLock.unlock()
+        guard isNew else { return }
         AXUIElementSetAttributeValue(AXUIElementCreateApplication(pid), "AXManualAccessibility" as CFString,
                                      kCFBooleanTrue)
     }

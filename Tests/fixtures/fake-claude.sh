@@ -12,6 +12,12 @@ while [ $# -gt 0 ]; do
   shift
 done
 
+# "dieearly": fails at start-up before any message arrives (like a logged-out CLI).
+if [ "${FAKE_CLAUDE_MODE:-}" = "dieearly" ]; then
+  echo '{"type":"result","subtype":"success","is_error":true,"result":"Not logged in · Please run /login"}'
+  exit 1
+fi
+
 # "stubborn": ignores SIGTERM and lingers after stdin closes, like a slow shutdown.
 if [ "${FAKE_CLAUDE_MODE:-}" = "stubborn" ]; then
   trap '' TERM

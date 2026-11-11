@@ -331,6 +331,13 @@ func runEngineTests() {
         guard case .failed(let msg)? = updates.last else { fail("expected failure: \(updates)"); return }
         expect(msg.contains("boom"), msg)
     }
+    test("a spare that died before the lookup reports why") {
+        let session = try makeSession("dieearly")
+        Thread.sleep(forTimeInterval: 0.4) // let it exit before anything is sent
+        let updates = collect(session, "x")
+        guard case .failed(let msg)? = updates.last else { fail("expected failure: \(updates)"); return }
+        expect(msg.contains("Not logged in"), msg)
+    }
     test("session without a result event falls back to the assistant text") {
         let updates = collect(try makeSession("noresult"), "x")
         guard case .finished(let text, _)? = updates.last else { fail("expected finish: \(updates)"); return }

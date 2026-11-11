@@ -120,7 +120,15 @@ final class ClaudeSession {
             p.terminationHandler = nil
             finalizeAfterExit()
         }
-        try process.run()
+        do {
+            try process.run()
+        } catch {
+            // The handlers capture self; drop them or a failed spawn leaks this session.
+            stdoutPipe.fileHandleForReading.readabilityHandler = nil
+            stderrPipe.fileHandleForReading.readabilityHandler = nil
+            process.terminationHandler = nil
+            throw error
+        }
     }
 
     func send(_ prompt: String, queue: DispatchQueue, handler: @escaping (SessionUpdate) -> Void) {
@@ -201,6 +209,12 @@ final class ClaudeSession {
                 assistantText += message
             }
         case .result(let info):
+            if handler == nil {
+                // A spare that fails before any lookup (e.g. logged out): keep the reason for
+                // finalizeAfterExit instead of reporting only an exit code.
+                if info.isError, !info.text.isEmpty { assistantError = info.text }
+                return
+            }
             if info.isError {
                 finish(.failed(info.text.isEmpty ? (assistantError ?? "claude 返回了错误。") : info.text))
             } else {
