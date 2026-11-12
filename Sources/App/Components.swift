@@ -62,6 +62,9 @@ final class FloatingPanel: NSPanel {
         becomesKeyOnlyIfNeeded = !allowsKey
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
         animationBehavior = .utilityWindow
+        // ClaudeDict stays inactive while its panels show, and AppKit hides an inactive
+        // app's tooltips by default. The icon-only toolbar needs them to name its buttons.
+        allowsToolTipsWhenApplicationIsInactive = true
     }
 
     override var canBecomeKey: Bool { allowsKey }
