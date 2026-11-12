@@ -1,89 +1,89 @@
-# ClaudeDict 设计说明
+# ClaudeDict design notes
 
 2026-11-10
 
-## 目标
+## Goal
 
-在 macOS 上做一个豆包式的划词 AI 工具：选中文字后出现工具条，可以翻译、润色、解析、朗读，主要服务英译中和英文写作。LLM 后端用 `claude -p`。
+A Doubao-style select-and-ask AI tool for macOS: select text and a toolbar appears next to it, offering translate, polish, analyze and read aloud. It is mainly for Chinese speakers reading and writing English. The LLM backend is `claude -p`.
 
-## 为什么是原生 Swift，而不是 fork GoldenDict
+## Why native Swift, not a GoldenDict fork
 
-需求里提到“基于 GoldenDict”。动手前查了这台机器：
+The original request said "based on GoldenDict". Before writing code, I checked the development Mac:
 
-- 没有安装 GoldenDict，也没有它的源码。
-- 没有 Qt；GoldenDict-ng 是 C++/Qt6（含 WebEngine）的大工程，在这里编译要先装 Qt 和十来个依赖。
-- 只有 Xcode Command Line Tools，没有完整 Xcode；SwiftPM 编译 Package.swift 会链接失败（PackageDescription 符号缺失），`swiftc` 本身可用。
-- GoldenDict 在 macOS 上的弹窗靠剪贴板触发，没有“选中即出工具条”。豆包式的交互无论如何都要新写。
+- GoldenDict was not installed, and its source was not there either.
+- Qt was not installed. GoldenDict-ng is a large C++/Qt6 project (including WebEngine); building it here would first need Qt and about ten other dependencies.
+- Only the Xcode Command Line Tools were installed, not full Xcode. SwiftPM failed to link Package.swift (missing PackageDescription symbols), while `swiftc` itself works.
+- On macOS, GoldenDict's popup is triggered through the clipboard; it has no "toolbar on selection". The Doubao-style interaction had to be written from scratch either way.
 
-所以做了一个原生 App，保留 GoldenDict 的交互习惯，并能接回 GoldenDict：
+So ClaudeDict is a native app that keeps GoldenDict's habits and can plug back into GoldenDict:
 
-- 结果窗口就是 GoldenDict 式的查词弹窗：出现在选区旁，点别处关闭，可以固定。
-- 单词结果是词典格式：英美音标、词性释义、例句。
-- 支持 GoldenDict 在 macOS 上的“连按两次 ⌘C”查词。
-- 可执行文件带 `--cli` 模式，可以在 GoldenDict 里配成“程序”词典（Html 类型）。
+- The result window works like GoldenDict's lookup popup: it opens next to the selection, closes when you click elsewhere, and can be pinned.
+- Word results use a dictionary layout: UK and US phonetics, definitions by part of speech, example sentences.
+- It supports GoldenDict's "press ⌘C twice" lookup on macOS.
+- The executable has a `--cli` mode, so GoldenDict can use it as a "program" dictionary (Html type).
 
-如果之后确实要在 GoldenDict-ng 源码里加 AI，`Sources/Core` 里的提示词、流式解析和预热进程池可以直接对照移植。
+If AI is ever added to the GoldenDict-ng source itself, the prompts, stream parsing and warm process pool in `Sources/Core` can serve as a reference for the port.
 
-## 结构
+## Structure
 
 ```
-Sources/Core   与界面无关，可测试
-  TextAnalyzer   清理选中文本（PDF 断行、连字符、单词两侧标点），判断语言和类型（单词/短语/句子/段落）
-  Prompts        一个通用 system prompt + 按 动作 × 语言 × 类型 的任务说明
-  StreamParser   解析 claude -p 的 stream-json 输出；LineBuffer 处理跨块的 UTF-8
-  Markdown       提示词要求的 Markdown 子集，按行解析（流式输出随时可渲染），也能转 HTML
-  ClaudeCommand  启动参数、环境变量、claude 路径查找（逐个用 --version 验证）
-  ClaudeSession  一个 claude -p 进程：先启动等待，再写入一条消息；SparePool 预热池；LookupEngine 加缓存
-  Settings       设置（缺字段时用默认值）和 LRU 缓存
+Sources/Core   UI-independent and testable
+  TextAnalyzer   cleans selected text (PDF line breaks, hyphenation, punctuation around a single word); detects language and kind (word/phrase/sentence/paragraph)
+  Prompts        one generic system prompt plus task instructions per action × language × kind
+  StreamParser   parses claude -p stream-json output; LineBuffer handles UTF-8 split across chunks
+  Markdown       the Markdown subset the prompts ask for, parsed line by line (so streaming output can render at any point); can also convert to HTML
+  ClaudeCommand  launch arguments, environment variables, finding claude (each candidate verified with --version)
+  ClaudeSession  one claude -p process: start it and let it wait, then write one message; SparePool is the warm pool; LookupEngine adds the cache
+  Settings       settings (missing fields fall back to defaults) and the LRU cache
 Sources/App    AppKit + SwiftUI
-  SelectionReader  辅助功能读选区，失败时模拟 ⌘C 并恢复剪贴板；ClipboardWatcher（⌘C⌘C）；SelectionMonitor（全局鼠标）
-  Toolbar          选区旁的工具条
-  ResultWindow     结果窗口和它的 view model
-  Speech           AVSpeechSynthesizer 朗读
-  HotKeys          Carbon RegisterEventHotKey 全局快捷键
-  AppDelegate      菜单栏、设置联动、URL scheme、snapshot 自检模式
-  CLI              --cli 命令行模式
-  SelfTest         --selftest-ax 辅助功能自检
+  SelectionReader  reads the selection through Accessibility; if that fails, simulates ⌘C and restores the clipboard; ClipboardWatcher (⌘C⌘C); SelectionMonitor (global mouse)
+  Toolbar          the toolbar next to the selection
+  ResultWindow     the result window and its view model
+  Speech           read-aloud with AVSpeechSynthesizer
+  HotKeys          global shortcuts with Carbon RegisterEventHotKey
+  AppDelegate      menu bar, settings wiring, URL scheme, snapshot self-check mode
+  CLI              --cli command-line mode
+  SelfTest         --selftest-ax Accessibility self-test
 ```
 
-## 调用 claude 的方式
+## How claude is called
 
-每个进程的参数：
+Arguments for each process:
 
 ```
-claude -p --model <m> --system-prompt <通用提示词> --tools "" --no-session-persistence --safe-mode
+claude -p --model <m> --system-prompt <generic prompt> --tools "" --no-session-persistence --safe-mode
        --input-format stream-json --output-format stream-json --include-partial-messages --verbose
 ```
 
-- `--safe-mode`：不加载用户的 hooks、插件、MCP、CLAUDE.md，但保留 OAuth 登录。本机实测 haiku 冷启动首字从 12.25 秒降到 3.86 秒（`scripts/probes/probe_latency.py haiku` 与加 `--safe-mode` 各 1 次，2026-11-10）。不用 `--bare`，因为它只认 API key，不读 OAuth 登录。
-- 预热：进程先启动，在 stdin 上等待；查询时写入一条 stream-json 消息并关闭 stdin，进程回答一次后退出。本机实测预热后 haiku 首字 0.53 秒、sonnet 0.92 秒，冷启动是 3.86 秒和 4.15 秒（`scripts/probes/probe_prewarm.py`、`probe_latency.py`，各 1 次）。闲置 60 秒后的预热进程仍可用（首字 0.63 秒），内存约 42 MB，启动 5 秒时约 206 MB（`scripts/probes/probe_idle.py`，进程树 RSS 合计）。走 App 完整代码路径的预热耗时用 `scripts/bench-warm.sh` 测，结果见 README。
-- 预热池：每个用到的模型一个进程；被取走后 0.5 秒补一个；超过 20 分钟或已退出的每 5 分钟替换；Mac 唤醒后全部重建；退出 App 时等最多 1 秒，仍在运行的直接 SIGKILL。
-- 错误：未知模型等错误在 stream-json 里是 `result` 事件，`subtype` 仍为 `success`，但 `is_error: true`，进程退出码 1；按 `is_error` 判断。进程崩溃没有 result 时，报告退出码和 stderr 末尾。
-- 选中的文本放在 `<text>…</text>` 里，system prompt 说明它是数据而不是指令；文本中的 `<text>`、`</text>` 会被改写，不能提前闭合。
+- `--safe-mode` skips the user's hooks, plugins, MCP servers and CLAUDE.md but keeps the OAuth login. Measured on the development Mac, haiku's cold-start first token dropped from 12.25 s to 3.86 s (`scripts/probes/probe_latency.py haiku`, one run without and one with `--safe-mode`, 2026-11-10). `--bare` is not used because it accepts only an API key and ignores the OAuth login.
+- Warm-up: the process starts and waits on stdin. A lookup writes one stream-json message and closes stdin; the process answers once and exits. Measured on the development Mac, the first token after warm-up took 0.53 s for haiku and 0.92 s for sonnet, against 3.86 s and 4.15 s cold (`scripts/probes/probe_prewarm.py` and `probe_latency.py`, one run each). A warm process that sat idle for 60 seconds still worked (first token 0.63 s) and used about 42 MB, against about 206 MB 5 seconds after start (`scripts/probes/probe_idle.py`, summed RSS of the process tree). `scripts/bench-warm.sh` measures warm latency through the app's full code path; the results are in the README.
+- Warm pool: one process per model in use. A replacement starts 0.5 seconds after one is taken. Every 5 minutes, processes older than 20 minutes or already exited are replaced. All are rebuilt after the Mac wakes. On quit, the app waits up to 1 second, then SIGKILLs any that are still running.
+- Errors: an error such as an unknown model arrives in stream-json as a `result` event whose `subtype` is still `success` but with `is_error: true`, and the process exits with code 1, so the app checks `is_error`. If the process crashes without a result, the app reports the exit code and the end of stderr.
+- The selected text goes inside `<text>…</text>`, and the system prompt says it is data, not instructions. Any `<text>` or `</text>` inside the selection is rewritten so it cannot close the block early.
 
-## 读选区
+## Reading the selection
 
-1. 只在拖选、双击/三击、Shift 点击之后读取，且前台不是 ClaudeDict 自己。
-2. 先用辅助功能读焦点元素的 `AXSelectedText`。密码框（`AXSecureTextField`）直接跳过。拖选起点不在焦点元素范围内（比如拖窗口）时不弹工具条。
-3. 辅助功能读取失败、且焦点不是列表、表格、按钮这类非文本控件、前台也不是 Finder 时，模拟 ⌘C，读完恢复剪贴板。
-4. Electron/Chromium 应用会先设置 `AXManualAccessibility`，让它们暴露辅助功能树。
+1. Read only after a drag selection, a double or triple click, or a Shift-click, and only when ClaudeDict itself is not the frontmost app.
+2. First read `AXSelectedText` from the focused element through Accessibility. Password fields (`AXSecureTextField`) are skipped. If the drag started outside the focused element's frame (for example, dragging a window), no toolbar appears.
+3. If the Accessibility read fails, the focus is not a non-text control such as a list, table or button, and the frontmost app is not Finder, simulate ⌘C and restore the clipboard after reading.
+4. For Electron and Chromium apps, set `AXManualAccessibility` first so they expose their accessibility tree.
 
-## 替换原文
+## Replacing the original text
 
-润色结果完成、且原文来自其他 App 的选区（工具条、快捷键或 ⌘C⌘C）时，原文那一行出现“替换原文”按钮。是否显示由 `Prompts.replacementText` 决定，不再看辅助功能的“可编辑”标记：网页里的输入框（比如各家聊天网页的输入框）经常不报这个标记，按钮就一直不出现。
+When a polish result is complete and the original text came from a selection in another app (through the toolbar, a shortcut or ⌘C⌘C), a "替换原文" (Replace) button appears in the original-text row. `Prompts.replacementText` decides whether it shows. It no longer looks at the Accessibility "editable" flag, because input boxes on web pages (such as the input boxes of chat websites) often don't report it, so the button never appeared there.
 
-替换用粘贴实现：结果窗口不会激活 ClaudeDict，所以原 App 一直在前台、选区还在。点按钮后先关窗口，等 0.25 秒让键盘焦点回到原 App，确认前台仍是原 App，再放入润色结果、发 ⌘V，1 秒后恢复用户原来的剪贴板（浏览器是异步粘贴，太早恢复会粘出旧内容）。原 App 已不在前台时不粘贴，只复制结果并在窗口底部提示。
+Replacing works by pasting. The result window doesn't activate ClaudeDict, so the original app stays in front and its selection stays in place. When the button is clicked, the window closes first, then waits 0.25 seconds for keyboard focus to return to the original app, checks that the original app is still frontmost, puts the polished text on the clipboard and sends ⌘V. 1 second later it restores the user's original clipboard (browsers paste asynchronously, so restoring too early would paste the old content). If the original app is no longer in front, it doesn't paste; it copies the result and shows a note at the bottom of the window.
 
-## 验证
+## Verification
 
-- `scripts/test.sh`：51 项核心自测，用 `Tests/fixtures/fake-claude.sh` 模拟 stream-json 协议，不联网。为确认测试真能发现问题，做过 7 次故意破坏（去掉 --safe-mode、把错误当成功、按块解码 UTF-8、不读缓存、关机时不 SIGKILL、预热进程启动即失败时丢掉原因、替换按钮不看原文来源），每次都由对应的测试报错，恢复后全部通过。
-- `--selftest-ax`：在本进程的屏幕外窗口里放一个 NSTextView 和一个密码框，用真实的辅助功能 API 读取选区、可编辑性、元素范围，并确认不读密码框；再在一个私有剪贴板上检查“替换原文”借用剪贴板后能恢复所有格式。去掉密码框判断、或只恢复纯文本时，对应项报错。
-- `--snapshot`：用真实 claude 跑一次查询，把结果窗口画成 PNG 检查排版，也用来测预热后的耗时（数据见 README）。
-- 正常模式启动检查：找到 `~/.local/bin/claude`，haiku、sonnet 各一个预热进程，5 个快捷键都注册成功；收到 SIGTERM 后正常退出，没有遗留 claude 进程。
+- `scripts/test.sh`: 51 core self-tests, using `Tests/fixtures/fake-claude.sh` to simulate the stream-json protocol, with no network. To confirm the tests can catch real problems, the code was broken on purpose 7 times (dropping --safe-mode, treating an error as success, decoding UTF-8 per chunk, skipping the cache, not SIGKILLing at shutdown, losing the reason when a warm process fails at start, showing the Replace button regardless of where the text came from). Each time the matching test failed, and all passed again after the code was restored.
+- `--selftest-ax`: puts an NSTextView and a password field in an off-screen window in its own process, reads the selection, editability and element frame through the real Accessibility API, and confirms the password field is not read. It then checks on a private pasteboard that after "替换原文" borrows the clipboard, every format comes back. Removing the password-field check, or restoring only plain text, makes the matching check fail.
+- `--snapshot`: runs one lookup with the real claude and draws the result window into a PNG to check the layout. It is also used to measure warm latency (numbers in the README).
+- Startup check in normal mode: it finds `~/.local/bin/claude`, keeps one warm process each for haiku and sonnet, and registers all 5 shortcuts. On SIGTERM it exits cleanly with no leftover claude processes.
 
-## 已知限制和后续可做
+## Known limitations and possible next steps
 
-- ad-hoc 签名：每次重新编译后要重新授权辅助功能。如果需要，可以建一个自签名证书固定签名。
-- 没有真机点击测试：工具条按钮、结果窗口拖动和缩放、替换原文等交互没有自动化测试，是按 AppKit 的标准做法实现的，需要人用一遍。
-- GoldenDict 的“程序”词典每次都冷启动（约 5.9 秒）。可以让 CLI 通过本地 socket 复用正在运行的 App 里的预热进程。
-- 还没有查词历史和生词本（GoldenDict 有历史和收藏），可以加在菜单栏里。
+- Ad-hoc signing: Accessibility must be granted again after every rebuild. A self-signed certificate could keep the signature stable if needed.
+- No real-click testing: the toolbar buttons, dragging and resizing the result window, Replace and similar interactions have no automated tests. They follow standard AppKit practice and need a person to try them.
+- GoldenDict's "program" dictionary cold-starts every time (about 5.9 seconds on the development Mac, see the README). The CLI could reuse the running app's warm processes through a local socket.
+- There is no lookup history or word list yet (GoldenDict has history and favorites). These could go in the menu bar.
