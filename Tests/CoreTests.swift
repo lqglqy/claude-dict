@@ -449,3 +449,27 @@ func runEngineTests() {
         pool.shutdown()
     }
 }
+
+func runGeometryTests() {
+    // Frames read from Mail's main window with a read-only Accessibility probe (2026-11-17): the
+    // page and its scroll area report a wrong origin; the group above them has the right one.
+    // The window frame is that of the split view filling the window.
+    let window = CGRect(x: 0, y: 39, width: 1800, height: 1130)
+    let page = CGRect(x: 0, y: 1169, width: 1231, height: 1299)
+    let group = CGRect(x: 561, y: 240, width: 1231, height: 1299)
+
+    test("drag frame skips a WebKit page frame placed outside its window") {
+        let frame = DragGeometry.containmentFrame(chain: [page, page, group], window: window)
+        expectEqual(frame, group)
+        expect(frame?.contains(CGPoint(x: 900, y: 500)) == true, "a drag in the reading pane counts")
+    }
+    test("drag frame is the element's own when it overlaps its window") {
+        let field = CGRect(x: 600, y: 300, width: 400, height: 30)
+        expectEqual(DragGeometry.containmentFrame(chain: [field, group], window: window), field)
+        expectEqual(DragGeometry.containmentFrame(chain: [field], window: nil), field)
+    }
+    test("drag frame falls back to the element's own when nothing overlaps") {
+        expectEqual(DragGeometry.containmentFrame(chain: [page, page], window: window), page)
+        expectEqual(DragGeometry.containmentFrame(chain: [], window: window), nil)
+    }
+}

@@ -157,6 +157,20 @@ enum AXSelfTest {
                 default:
                     check(false, "\(state.id): read via AX: \(outcome)")
                 }
+                // A drag that starts on the page counts; one far away does not.
+                if !state.expected.isEmpty {
+                    if let windowFrame = SelectionReader.frame(of: pageWindow),
+                       case .text = SelectionReader.inspect(web, mouseDownAt: CGPoint(x: windowFrame.midX, y: windowFrame.midY)).0 {
+                        check(true, "\(state.id): drag starting on the page is accepted")
+                    } else {
+                        check(false, "\(state.id): drag starting on the page is accepted")
+                    }
+                    if case .outsideElement = SelectionReader.inspect(web, mouseDownAt: CGPoint(x: 9000, y: 9000)).0 {
+                        check(true, "\(state.id): drag starting far from the page is ignored")
+                    } else {
+                        check(false, "\(state.id): drag starting far from the page is ignored")
+                    }
+                }
             }
             print(failures == 0 ? "AX self-test passed" : "AX self-test: \(failures) failed")
             exit(failures == 0 ? 0 : 1)

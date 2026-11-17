@@ -92,7 +92,7 @@ enum SelectionReader {
         let editable = isEditable(element, role: role)
         // A drag that started outside the focused element (a window drag, a slider) leaves an
         // old selection in place; do not pop up for it.
-        if let point = mouseDownAt, let frame = frame(of: element), !frame.insetBy(dx: -24, dy: -24).contains(point) {
+        if let point = mouseDownAt, let frame = dragFrame(of: element), !frame.insetBy(dx: -24, dy: -24).contains(point) {
             return (.outsideElement, editable)
         }
         var valueRef: CFTypeRef?
@@ -151,6 +151,30 @@ enum SelectionReader {
         guard AXValueGetValue(positionRef as! AXValue, .cgPoint, &origin),
               AXValueGetValue(sizeRef as! AXValue, .cgSize, &size) else { return nil }
         return CGRect(origin: origin, size: size)
+    }
+
+    /// The frame a drag must start in: the element's own, unless it does not overlap the element's
+    /// window (WebKit in Mail's reading pane), then the nearest ancestor's that does.
+    static func dragFrame(of element: AXUIElement) -> CGRect? {
+        guard let own = frame(of: element) else { return nil }
+        guard let window = elementAttribute(element, kAXWindowAttribute).flatMap({ frame(of: $0) }),
+              !DragGeometry.overlaps(own, window) else { return own }
+        var chain = [own]
+        var current = element
+        for _ in 0..<8 {
+            guard let parent = elementAttribute(current, kAXParentAttribute),
+                  let parentFrame = frame(of: parent) else { break }
+            chain.append(parentFrame)
+            current = parent
+        }
+        return DragGeometry.containmentFrame(chain: chain, window: window)
+    }
+
+    private static func elementAttribute(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
+        var ref: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &ref) == .success,
+              let ref, CFGetTypeID(ref) == AXUIElementGetTypeID() else { return nil }
+        return (ref as! AXUIElement)
     }
 
     /// Electron and Chromium apps only build their accessibility tree when asked to.
