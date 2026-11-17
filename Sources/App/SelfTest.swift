@@ -16,6 +16,13 @@ enum AXSelfTest {
             print("SKIP not trusted for Accessibility")
             exit(2)
         }
+        // While the screen is locked, Accessibility lists placeholder windows (role AXApplication)
+        // and every check below would fail for reasons that have nothing to do with the code.
+        if let session = CGSessionCopyCurrentDictionary() as? [String: Any],
+           session["CGSSessionScreenIsLocked"] as? Bool == true {
+            print("SKIP screen is locked; Accessibility does not report windows then")
+            exit(2)
+        }
         let panel = FloatingPanel(allowsKey: false, resizable: false, level: .normal)
         let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 320, height: 80))
         textView.string = "Hello brave new world"
@@ -72,9 +79,16 @@ enum AXSelfTest {
                 if !ok { failures += 1 }
             }
             let app = AXUIElementCreateApplication(getpid())
-            guard let textWindow = window(app, id: "selftest-text"),
-                  let area = find(textWindow, role: "AXTextArea", depth: 0) else {
-                print("FAIL no AXTextArea in our own window")
+            // Our windows can take a moment to show up in Accessibility while the WebKit pages
+            // start, so wait for them instead of trusting a fixed delay.
+            var textArea: AXUIElement?
+            let windowDeadline = Date().addingTimeInterval(10)
+            repeat {
+                textArea = window(app, id: "selftest-text").flatMap { find($0, role: "AXTextArea", depth: 0) }
+                if textArea == nil { Thread.sleep(forTimeInterval: 0.2) }
+            } while textArea == nil && Date() < windowDeadline
+            guard let area = textArea else {
+                print("FAIL no AXTextArea in our own window; windows: \(windowIDs(app))")
                 exit(1)
             }
             let (outcome, editable) = SelectionReader.inspect(area, mouseDownAt: nil)
@@ -187,6 +201,21 @@ enum AXSelfTest {
             AXUIElementCopyAttributeValue(window, kAXIdentifierAttribute as CFString, &idRef)
             return idRef as? String == id
         }
+    }
+
+    /// The app's windows as Accessibility lists them, for failure messages.
+    nonisolated private static func windowIDs(_ app: AXUIElement) -> String {
+        var ref: CFTypeRef?
+        let error = AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &ref)
+        guard error == .success, let list = ref as? [AXUIElement] else { return "error \(error.rawValue)" }
+        return list.map { window -> String in
+            var idRef: CFTypeRef?
+            let idError = AXUIElementCopyAttributeValue(window, kAXIdentifierAttribute as CFString, &idRef)
+            var roleRef: CFTypeRef?
+            let roleError = AXUIElementCopyAttributeValue(window, kAXRoleAttribute as CFString, &roleRef)
+            return "\(roleRef as? String ?? "role error \(roleError.rawValue)"):"
+                + "\(idRef as? String ?? "id error \(idError.rawValue)")"
+        }.joined(separator: ", ")
     }
 
     /// Roles under an element, nested in brackets, for failure messages.
