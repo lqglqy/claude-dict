@@ -100,8 +100,26 @@ enum SelectionReader {
         if error == .success, let text = valueRef as? String {
             return (text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .noSelection : .text(text), editable)
         }
+        // WebKit pages (Mail's message view and compose window, Safari) have no AXSelectedText;
+        // their selection is only available as a text-marker range.
+        if let text = markerSelection(element) {
+            return (text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .noSelection : .text(text), editable)
+        }
         if error == .noValue { return (.noSelection, editable) }
         return (.failed(role: role), editable)
+    }
+
+    /// The selection as WebKit exposes it. nil when the element has no selected text-marker range
+    /// (anything that is not WebKit, or WebKit with nothing selected), so callers keep their
+    /// usual handling.
+    private static func markerSelection(_ element: AXUIElement) -> String? {
+        var rangeRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, "AXSelectedTextMarkerRange" as CFString, &rangeRef) == .success,
+              let rangeRef else { return nil }
+        var stringRef: CFTypeRef?
+        guard AXUIElementCopyParameterizedAttributeValue(element, "AXStringForTextMarkerRange" as CFString,
+                                                         rangeRef, &stringRef) == .success else { return nil }
+        return stringRef as? String
     }
 
     private static func string(_ element: AXUIElement, _ attribute: String) -> String? {

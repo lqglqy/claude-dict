@@ -64,7 +64,7 @@ claude -p --model <m> --system-prompt <generic prompt> --tools "" --no-session-p
 ## Reading the selection
 
 1. Read only after a drag selection, a double or triple click, or a Shift-click, and only when ClaudeDict itself is not the frontmost app.
-2. First read `AXSelectedText` from the focused element through Accessibility. Password fields (`AXSecureTextField`) are skipped. If the drag started outside the focused element's frame (for example, dragging a window), no toolbar appears.
+2. First read `AXSelectedText` from the focused element through Accessibility. Password fields (`AXSecureTextField`) are skipped. If the drag started outside the focused element's frame (for example, dragging a window), no toolbar appears. WebKit pages, such as Mail's message view and compose window, have no `AXSelectedText`; for them the selection is read as a text-marker range (`AXSelectedTextMarkerRange`, then `AXStringForTextMarkerRange`).
 3. If the Accessibility read fails, the focus is not a non-text control such as a list, table or button, and the frontmost app is not Finder, simulate ⌘C and restore the clipboard after reading.
 4. For Electron and Chromium apps, set `AXManualAccessibility` first so they expose their accessibility tree.
 
@@ -77,7 +77,7 @@ Replacing works by pasting. The result window doesn't activate ClaudeDict, so th
 ## Verification
 
 - `scripts/test.sh`: 51 core self-tests, using `Tests/fixtures/fake-claude.sh` to simulate the stream-json protocol, with no network. To confirm the tests can catch real problems, the code was broken on purpose 7 times (dropping --safe-mode, treating an error as success, decoding UTF-8 per chunk, skipping the cache, not SIGKILLing at shutdown, losing the reason when a warm process fails at start, showing the Replace button regardless of where the text came from). Each time the matching test failed, and all passed again after the code was restored.
-- `--selftest-ax`: puts an NSTextView and a password field in an off-screen window in its own process, reads the selection, editability and element frame through the real Accessibility API, and confirms the password field is not read. It then checks on a private pasteboard that after "替换原文" borrows the clipboard, every format comes back. Removing the password-field check, or restoring only plain text, makes the matching check fail.
+- `--selftest-ax`: puts an NSTextView and a password field in an off-screen window in its own process, reads the selection, editability and element frame through the real Accessibility API, and confirms the password field is not read. It then checks on a private pasteboard that after "替换原文" borrows the clipboard, every format comes back. Removing the password-field check, or restoring only plain text, makes the matching check fail. It also loads three offscreen WebKit pages: one with "brave new" selected, one that is editable as a whole like Mail's compose window, and one with nothing selected. Each page first confirms its own selection from JavaScript. Before the text-marker read was added, the two pages with a selection were read as having none.
 - `--snapshot`: runs one lookup with the real claude and draws the result window into a PNG to check the layout. It is also used to measure warm latency (numbers in the README).
 - Startup check in normal mode: it finds `~/.local/bin/claude`, keeps one warm process each for haiku and sonnet, and registers all 5 shortcuts. On SIGTERM it exits cleanly with no leftover claude processes.
 
