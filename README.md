@@ -1,6 +1,6 @@
 # ClaudeDict
 
-A macOS menu-bar tool for text you select. Select English in any app and a small toolbar appears next to it: **Translate · Polish · Analyze · Read aloud · Copy**. The interaction follows Doubao's select-to-translate toolbar and GoldenDict's lookup popup, and the answers come from your local `claude -p`.
+A macOS menu-bar tool for text you select. Select English in any app and a small row of icons appears next to it: **Translate · Polish · Analyze · Read aloud · Copy** (hover over an icon to see its name). The interaction follows Doubao's select-to-translate toolbar and GoldenDict's lookup popup, and the answers come from your local `claude -p`.
 
 The interface and the answers are in Chinese. ClaudeDict is made for Chinese speakers who read and write English.
 

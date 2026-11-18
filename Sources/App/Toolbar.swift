@@ -39,14 +39,16 @@ struct ToolbarView: View {
         .fixedSize()
     }
 
+    /// Icon only. The name shows as a tooltip on hover and is what VoiceOver reads.
     private func item(_ title: String, _ symbol: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 4) {
-                Image(systemName: symbol).font(.system(size: 11, weight: .medium))
-                Text(title).font(.system(size: 12))
-            }
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .medium))
+                .frame(width: 18, height: 18)
         }
         .buttonStyle(HoverButtonStyle())
+        .help(title)
+        .accessibilityLabel(title)
     }
 }
 
