@@ -112,7 +112,7 @@ tccutil reset Accessibility local.claudedict.app
 ## Development
 
 ```bash
-scripts/test.sh                                   # core logic self-tests (51, using a fake claude script, offline)
+scripts/test.sh                                   # core logic self-tests (54, using a fake claude script, offline)
 scripts/build.sh                                  # build only, to build/ClaudeDict.app
 build/ClaudeDict.app/Contents/MacOS/ClaudeDict --selftest-ax   # Accessibility self-test for reading selections (Terminal needs Accessibility)
 build/ClaudeDict.app/Contents/MacOS/ClaudeDict --snapshot translate out.png --warm-wait 8 "serendipity"   # one real lookup, result window saved as a PNG
